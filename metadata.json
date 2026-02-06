@@ -1,0 +1,5 @@
+{
+  "name": "Copy of CEE AI Advisor",
+  "description": "Expert AI Chatbot for 'Certificats d'Économies d'Énergie' (CEE) with intelligent version filtering and metadata-aware RAG simulation for energy efficiency operations.",
+  "requestFramePermissions": []
+}
