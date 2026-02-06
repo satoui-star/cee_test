@@ -4,7 +4,7 @@ import react from '@vitejs/plugin-react';
 export default defineConfig({
   plugins: [react()],
   define: {
-    // Injection sécurisée de la clé API pour le frontend
+    // Cette ligne est cruciale : elle remplace process.env.API_KEY par votre clé réelle lors du build
     'process.env.API_KEY': JSON.stringify(process.env.API_KEY || "")
   },
   build: {
