@@ -1,6 +1,5 @@
 import { GoogleGenAI, GenerateContentResponse } from "@google/genai";
 import { CeeKnowledgeItem, GroundingSource } from "../types";
-
 // Using the recommended model for basic/general tasks
 const MODEL_NAME = 'gemini-3-flash-preview';
 
