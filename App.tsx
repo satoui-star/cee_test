@@ -21,8 +21,8 @@ const App: React.FC = () => {
       timestamp: Date.now(),
     }
   ]);
-  const [input, setInput] = useState('');
-  const [isTyping, setIsTyping] = useState(false);
+  const [input, setInput] = useState<string>('');
+  const [isTyping, setIsTyping] = useState<boolean>(false);
   
   const chatEndRef = useRef<HTMLDivElement>(null);
 
@@ -35,7 +35,7 @@ const App: React.FC = () => {
   }, [messages, isTyping]);
 
   const handleScrape = async () => {
-    setScraper(prev => ({ ...prev, isScanning: true }));
+    setScraper((prev: ScraperState) => ({ ...prev, isScanning: true }));
     try {
       const results = await mockScrapeCEE();
       setScraper({
@@ -44,14 +44,15 @@ const App: React.FC = () => {
         items: results,
       });
       
-      setMessages(prev => [...prev, {
+      setMessages((prev: ChatMessageType[]) => [...prev, {
         id: `sys-${Date.now()}`,
         role: 'assistant',
         content: `Indexation terminée. J'ai maintenant accès aux fiches techniques et à la réglementation en vigueur.`,
         timestamp: Date.now()
       }]);
     } catch (error) {
-      setScraper(prev => ({ ...prev, isScanning: false }));
+      console.error("Scraping error:", error);
+      setScraper((prev: ScraperState) => ({ ...prev, isScanning: false }));
     }
   };
 
@@ -76,7 +77,7 @@ const App: React.FC = () => {
       sources: [],
     };
 
-    setMessages(prev => [...prev, userMessage, initialBotMessage]);
+    setMessages((prev: ChatMessageType[]) => [...prev, userMessage, initialBotMessage]);
     setInput('');
     setIsTyping(true);
 
@@ -92,7 +93,7 @@ const App: React.FC = () => {
         const chunkText = chunk.text;
         if (chunkText) {
           fullText += chunkText;
-          setMessages(prev => prev.map(m => 
+          setMessages((prev: ChatMessageType[]) => prev.map((m: ChatMessageType) => 
             m.id === assistantMsgId ? { ...m, content: fullText } : m
           ));
         }
@@ -100,18 +101,18 @@ const App: React.FC = () => {
 
       if (lastChunk) {
         const sources = getGroundingSources(lastChunk);
-        setMessages(prev => prev.map(m => 
+        setMessages((prev: ChatMessageType[]) => prev.map((m: ChatMessageType) => 
           m.id === assistantMsgId ? { ...m, sources } : m
         ));
       }
 
     } catch (error: any) {
-      console.error(error);
+      console.error("Chat error:", error);
       const errorMsg = error.message?.includes("Clé API") 
         ? "Erreur : La clé API n'est pas configurée. Veuillez ajouter API_KEY dans les variables d'environnement de votre projet Vercel."
         : "Une erreur est survenue lors de la communication avec l'expert IA. Veuillez réessayer.";
       
-      setMessages(prev => prev.map(m => 
+      setMessages((prev: ChatMessageType[]) => prev.map((m: ChatMessageType) => 
         m.id === assistantMsgId ? { ...m, content: errorMsg } : m
       ));
     } finally {
@@ -150,7 +151,7 @@ const App: React.FC = () => {
 
         <div className="flex-1 overflow-y-auto p-4 sm:p-8 scroll-smooth bg-[radial-gradient(#e5e7eb_1px,transparent_1px)] [background-size:16px_16px]">
           <div className="max-w-4xl mx-auto w-full">
-            {messages.map(msg => (
+            {messages.map((msg: ChatMessageType) => (
               <ChatMessage key={msg.id} message={msg} />
             ))}
             <div ref={chatEndRef} className="h-4" />
@@ -163,7 +164,7 @@ const App: React.FC = () => {
               <input
                 type="text"
                 value={input}
-                onChange={(e) => setInput(e.target.value)}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setInput(e.target.value)}
                 placeholder="Posez votre question sur les CEE ou une fiche (ex: BAR-TH-164)..."
                 className="w-full bg-slate-50 border border-slate-200 rounded-2xl py-4 pl-6 pr-20 focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all outline-none text-slate-800 placeholder:text-slate-400 shadow-sm"
               />
