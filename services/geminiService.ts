@@ -51,8 +51,8 @@ ${ficheContext || 'Aucune fiche technique spécifique.'}`;
     config: {
       systemInstruction: systemInstruction,
       temperature: 0.1,
-      tools: [{ googleSearch: {} }],
-    },
+      tools: [{ googleSearch: {} }]
+    }
   });
 
   const getGroundingSources = (finalResponse: GenerateContentResponse): GroundingSource[] => {
@@ -80,12 +80,14 @@ ${ficheContext || 'Aucune fiche technique spécifique.'}`;
       }
     });
 
-    return {
-      stream: responseStream,
-      getGroundingSources
-    };
-  } catch (error) {
-    console.error("Gemini API Error:", error);
-    throw error;
-  }
+    // Utilisation d'un Map typé pour dédoublonner les sources par URL
+    const uniqueSourcesMap = new Map<string, GroundingSource>();
+    sources.forEach(s => uniqueSourcesMap.set(s.url, s));
+    return Array.from(uniqueSourcesMap.values());
+  };
+
+  return {
+    stream: responseStream,
+    getGroundingSources: getGroundingSources
+  };
 };
