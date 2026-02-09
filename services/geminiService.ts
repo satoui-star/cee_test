@@ -9,41 +9,80 @@ export interface AssistantStreamResult {
   getGroundingSources: (finalResponse: GenerateContentResponse) => GroundingSource[];
 }
 
+/**
+ * Fonction helper pour extraire les sources sans dépendre d'une fermeture complexe
+ */
+const extractSources = (finalResponse: GenerateContentResponse, contextItems: CeeKnowledgeItem[]): GroundingSource[] => {
+  const sources: GroundingSource[] = [];
+  
+  // 1. Google Search Grounding
+  const chunks = finalResponse.candidates?.[0]?.groundingMetadata?.groundingChunks;
+  if (chunks && Array.isArray(chunks)) {
+    chunks.forEach((chunk: any) => {
+      if (chunk.web && chunk.web.uri) {
+        sources.push({
+          title: chunk.web.title || "Source Web",
+          url: chunk.web.uri
+        });
+      }
+    });
+  }
+
+  // 2. Cross-referencing local context
+  const text = finalResponse.text || "";
+  const lowerText = text.toLowerCase();
+  
+  contextItems.forEach((item) => {
+    const identifier = (item.code || item.title).toLowerCase();
+    if (lowerText.includes(identifier)) {
+      sources.push({
+        title: item.code || item.title,
+        url: item.url
+      });
+    }
+  });
+
+  // 3. Deduplicate
+  const uniqueMap = new Map<string, GroundingSource>();
+  sources.forEach(s => uniqueMap.set(s.url, s));
+  
+  return Array.from(uniqueMap.values());
+};
+
 export const askCeeExpertStream = async (
   query: string,
   contextItems: CeeKnowledgeItem[],
   referenceDate: string
 ): Promise<AssistantStreamResult> => {
-  // Utilisation directe de process.env.API_KEY injecté par Vite
-  const apiKey = process.env.API_KEY;
+  const apiKey = process.env.API_KEY || "";
   
-  if (!apiKey || apiKey === "") {
-    throw new Error("Clé API manquante ou vide. Assurez-vous d'avoir configuré API_KEY dans Vercel.");
+  if (!apiKey) {
+    throw new Error("La clé API est absente des variables d'environnement.");
   }
 
-  // Initialisation à chaque appel pour garantir l'utilisation de la clé la plus récente
-  const ai = new GoogleGenAI({ apiKey });
+  const ai = new GoogleGenAI({ apiKey: apiKey });
 
-  const policyContext = contextItems.filter(i => i.type !== 'FICHE').map(i => 
-    `[DOC] ${i.title}: ${i.content} (Source: ${i.url})`
-  ).join('\n');
+  const policyContext = contextItems
+    .filter(i => i.type !== 'FICHE')
+    .map(i => `[DOC] ${i.title}: ${i.content} (Source: ${i.url})`)
+    .join('\n');
 
-  const ficheContext = contextItems.filter(i => i.type === 'FICHE').map(i => 
-    `[FICHE] ${i.code}: ${i.title}. Date: ${i.versionDate}. Contenu: ${i.content}`
-  ).join('\n');
+  const ficheContext = contextItems
+    .filter(i => i.type === 'FICHE')
+    .map(i => `[FICHE] ${i.code}: ${i.title}. Date: ${i.versionDate}. Contenu: ${i.content}`)
+    .join('\n');
 
   const systemInstruction = `Tu es un expert du dispositif CEE (Certificats d'Économies d'Énergie) pour le Ministère de la Transition Écologique.
-Aujourd'hui nous sommes le ${new Date(referenceDate).toLocaleDateString('fr-FR')}.
+Date du jour : ${new Date(referenceDate).toLocaleDateString('fr-FR')}.
 
 INSTRUCTIONS :
-1. Utilise prioritairement le contexte local fourni pour répondre.
-2. Utilise Google Search pour compléter les informations si nécessaire ou trouver les dernières mises à jour.
-3. Sois technique et cite les fiches (ex: BAR-TH-164).
-4. Réponds en français.
+1. Utilise prioritairement le contexte local fourni.
+2. Utilise Google Search pour les dernières actualités.
+3. Cite systématiquement les fiches (ex: BAR-TH-164).
 
 CONTEXTE LOCAL :
-${policyContext || 'Aucun document général.'}
-${ficheContext || 'Aucune fiche technique spécifique.'}`;
+${policyContext || 'Aucun doc général.'}
+${ficheContext || 'Aucune fiche technique.'}`;
 
   const responseStream = await ai.models.generateContentStream({
     model: MODEL_NAME,
@@ -55,39 +94,8 @@ ${ficheContext || 'Aucune fiche technique spécifique.'}`;
     }
   });
 
-  const getGroundingSources = (finalResponse: GenerateContentResponse): GroundingSource[] => {
-    const sources: GroundingSource[] = [];
-    
-    // Extraction des sources de recherche Google
-    const chunks = finalResponse.candidates?.[0]?.groundingMetadata?.groundingChunks;
-    if (chunks) {
-      chunks.forEach((chunk: any) => {
-        if (chunk.web?.uri) {
-          sources.push({
-            title: chunk.web.title || "Source Officielle",
-            url: chunk.web.uri
-          });
-        }
-      });
-    }
-
-    // Références croisées avec le contexte local
-    const text = finalResponse.text || "";
-    contextItems.forEach(item => {
-      const identifier = item.code || item.title;
-      if (text.toLowerCase().includes(identifier.toLowerCase())) {
-        sources.push({ title: identifier, url: item.url });
-      }
-    });
-
-    // Utilisation d'un Map typé pour dédoublonner les sources par URL
-    const uniqueSourcesMap = new Map<string, GroundingSource>();
-    sources.forEach(s => uniqueSourcesMap.set(s.url, s));
-    return Array.from(uniqueSourcesMap.values());
-  };
-
   return {
     stream: responseStream,
-    getGroundingSources: getGroundingSources
+    getGroundingSources: (resp: GenerateContentResponse) => extractSources(resp, contextItems)
   };
 };
