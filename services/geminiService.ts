@@ -80,11 +80,12 @@ ${ficheContext || 'Aucune fiche technique spécifique.'}`;
       }
     });
 
-    return Array.from(new Map(sources.map(s => [s.url, s])).values());
-  };
-
-  return {
-    stream: responseStream,
-    getGroundingSources
-  };
+    return {
+      stream: responseStream,
+      getGroundingSources
+    };
+  } catch (error) {
+    console.error("Gemini API Error:", error);
+    throw error;
+  }
 };
