@@ -1,4 +1,3 @@
-
 export type ItemType = 'FICHE' | 'POLITIQUE' | 'SECTEUR';
 
 export interface CeeKnowledgeItem {
@@ -15,6 +14,12 @@ export interface CeeKnowledgeItem {
 export interface GroundingSource {
   title: string;
   url: string;
+}
+
+export interface SearchHistoryItem {
+  id: string;
+  query: string;
+  timestamp: number;
 }
 
 export interface ChatMessage {

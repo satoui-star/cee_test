@@ -1,6 +1,7 @@
 import { GoogleGenAI, GenerateContentResponse } from "@google/genai";
 import { CeeKnowledgeItem, GroundingSource } from "../types";
-// Using the recommended model for basic/general tasks
+
+// Modèle recommandé pour les tâches générales
 const MODEL_NAME = 'gemini-3-flash-preview';
 
 export interface AssistantStreamResult {
@@ -13,14 +14,14 @@ export const askCeeExpertStream = async (
   contextItems: CeeKnowledgeItem[],
   referenceDate: string
 ): Promise<AssistantStreamResult> => {
-  // Accessing the API key injected by Vite define or environment
+  // Utilisation directe de process.env.API_KEY injecté par Vite
   const apiKey = process.env.API_KEY;
   
-  if (!apiKey) {
-    throw new Error("Clé API manquante. Veuillez configurer API_KEY dans vos variables d'environnement Vercel.");
+  if (!apiKey || apiKey === "") {
+    throw new Error("Clé API manquante ou vide. Assurez-vous d'avoir configuré API_KEY dans Vercel.");
   }
 
-  // Initialize strictly following guidelines
+  // Initialisation à chaque appel pour garantir l'utilisation de la clé la plus récente
   const ai = new GoogleGenAI({ apiKey });
 
   const policyContext = contextItems.filter(i => i.type !== 'FICHE').map(i => 
@@ -35,61 +36,55 @@ export const askCeeExpertStream = async (
 Aujourd'hui nous sommes le ${new Date(referenceDate).toLocaleDateString('fr-FR')}.
 
 INSTRUCTIONS :
-1. Utilise prioritairement le contexte local fourni.
-2. Si l'information est absente, utilise Google Search pour trouver les dernières réglementations sur ecologie.gouv.fr.
-3. Sois précis, technique et cite toujours tes sources (codes fiches BAR-TH-164, etc.).
-4. Réponds en français de manière concise et professionnelle.
+1. Utilise prioritairement le contexte local fourni pour répondre.
+2. Utilise Google Search pour compléter les informations si nécessaire ou trouver les dernières mises à jour.
+3. Sois technique et cite les fiches (ex: BAR-TH-164).
+4. Réponds en français.
 
 CONTEXTE LOCAL :
 ${policyContext || 'Aucun document général.'}
 ${ficheContext || 'Aucune fiche technique spécifique.'}`;
 
-  try {
-    const responseStream = await ai.models.generateContentStream({
-      model: MODEL_NAME,
-      contents: [{ parts: [{ text: query }] }],
-      config: {
-        systemInstruction: systemInstruction,
-        temperature: 0.2,
-        tools: [{ googleSearch: {} }],
-      },
-    });
+  const responseStream = await ai.models.generateContentStream({
+    model: MODEL_NAME,
+    contents: [{ parts: [{ text: query }] }],
+    config: {
+      systemInstruction: systemInstruction,
+      temperature: 0.1,
+      tools: [{ googleSearch: {} }],
+    },
+  });
 
-    const getGroundingSources = (finalResponse: GenerateContentResponse): GroundingSource[] => {
-      const sources: GroundingSource[] = [];
-      
-      // 1. Extract sources from Google Search Grounding Metadata
-      const chunks = finalResponse.candidates?.[0]?.groundingMetadata?.groundingChunks;
-      if (chunks) {
-        chunks.forEach((chunk: any) => {
-          if (chunk.web?.uri) {
-            sources.push({
-              title: chunk.web.title || "Source Web Officielle",
-              url: chunk.web.uri
-            });
-          }
-        });
-      }
-
-      // 2. Cross-reference with our local context items based on mention in text
-      const text = finalResponse.text || "";
-      contextItems.forEach(item => {
-        const identifier = item.code || item.title;
-        if (text.toLowerCase().includes(identifier.toLowerCase())) {
-          sources.push({ title: identifier, url: item.url });
+  const getGroundingSources = (finalResponse: GenerateContentResponse): GroundingSource[] => {
+    const sources: GroundingSource[] = [];
+    
+    // Extraction des sources de recherche Google
+    const chunks = finalResponse.candidates?.[0]?.groundingMetadata?.groundingChunks;
+    if (chunks) {
+      chunks.forEach((chunk: any) => {
+        if (chunk.web?.uri) {
+          sources.push({
+            title: chunk.web.title || "Source Officielle",
+            url: chunk.web.uri
+          });
         }
       });
+    }
 
-      // Deduplicate by URL
-      return Array.from(new Map(sources.map(s => [s.url, s])).values());
-    };
+    // Références croisées avec le contexte local
+    const text = finalResponse.text || "";
+    contextItems.forEach(item => {
+      const identifier = item.code || item.title;
+      if (text.toLowerCase().includes(identifier.toLowerCase())) {
+        sources.push({ title: identifier, url: item.url });
+      }
+    });
 
-    return {
-      stream: responseStream,
-      getGroundingSources
-    };
-  } catch (error) {
-    console.error("Gemini API Error:", error);
-    throw error;
-  }
+    return Array.from(new Map(sources.map(s => [s.url, s])).values());
+  };
+
+  return {
+    stream: responseStream,
+    getGroundingSources
+  };
 };
